@@ -10,11 +10,20 @@ Parameters:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
 
+  VpcId:
+    Type: String
+    Default: vpc-0b8a9866b134403da
+
+  SubnetId:
+    Type: String
+    Default: subnet-0f0f914f1878ae8f6
+
 Resources:
   LabSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Security group for lab EC2
+      VpcId: !Ref VpcId
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 22
@@ -26,6 +35,7 @@ Resources:
     Properties:
       InstanceType: !Ref InstanceType
       ImageId: !Ref ImageId
+      SubnetId: !Ref SubnetId
       SecurityGroupIds:
         - !Ref LabSecurityGroup
       Tags:
