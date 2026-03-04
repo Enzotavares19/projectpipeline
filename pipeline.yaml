@@ -75,7 +75,7 @@ Resources:
             Principal:
               Service: cloudformation.amazonaws.com
             Action: sts:AssumeRole
-        Policies:
+      Policies:
         - PolicyName: cloudformation-lab-policy
           PolicyDocument:
             Version: '2012-10-17'
@@ -91,7 +91,7 @@ Resources:
                   - s3:CreateBucket
                   - s3:PutEncryptionConfiguration
                   - s3:PutBucketPolicy
-                Resource: !Sub arn:aws:s3:::${ArtifactBucket}/*
+                Resource: '*'
 
   CodeBuildRole:
     Type: AWS::IAM::Role
