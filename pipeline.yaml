@@ -167,6 +167,17 @@ Resources:
               OutputArtifacts:
                 - Name: SourceOutput
 
+        - Name: Approval
+          Actions:
+            - Name: ManualApproval
+              ActionTypeId:
+                Category: Approval
+                Owner: AWS
+                Provider: Manual
+                Version: '1'
+              Configuration:
+                CustomData: "Revisar o template.yaml antes de aprovar o deploy da EC2"
+
         - Name: Deploy
           Actions:
             - Name: DeployEC2
