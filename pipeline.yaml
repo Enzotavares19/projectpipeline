@@ -130,6 +130,101 @@ Resources:
                   - s3:PutObject
                 Resource: !Sub arn:aws:s3:::${ArtifactBucket}/*
 
+  NotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: lab-pipeline-notifications
+      Subscription:
+        - Protocol: email
+          Endpoint: enzo.tavares@fulltime.com.br
+
+  NotificationTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref NotificationTopic
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sns:Publish
+            Resource: !Ref NotificationTopic
+
+  ApprovalEvent:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: lab-pipeline-approval
+      Description: Notifica quando o pipeline aguarda aprovacao
+      EventPattern:
+        source:
+          - aws.codepipeline
+        detail-type:
+          - CodePipeline Action Execution State Change
+        detail:
+          pipeline:
+            - lab-ec2-pipeline
+          state:
+            - WAITING
+          type:
+            category:
+              - Approval
+      Targets:
+        - Arn: !Ref NotificationTopic
+          Id: ApprovalTarget
+          InputTransformer:
+            InputPathsMap:
+              pipeline: $.detail.pipeline
+              stage: $.detail.stage
+            InputTemplate: '"O pipeline <pipeline> esta aguardando aprovacao manual no estagio <stage>. Acesse o console AWS para aprovar ou rejeitar."'
+
+  FailureEvent:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: lab-pipeline-failure
+      Description: Notifica quando o pipeline falha
+      EventPattern:
+        source:
+          - aws.codepipeline
+        detail-type:
+          - CodePipeline Pipeline Execution State Change
+        detail:
+          pipeline:
+            - lab-ec2-pipeline
+          state:
+            - FAILED
+      Targets:
+        - Arn: !Ref NotificationTopic
+          Id: FailureTarget
+          InputTransformer:
+            InputPathsMap:
+              pipeline: $.detail.pipeline
+            InputTemplate: '"O pipeline <pipeline> falhou. Acesse o console AWS para verificar o erro."'
+
+  SuccessEvent:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: lab-pipeline-success
+      Description: Notifica quando o pipeline conclui com sucesso
+      EventPattern:
+        source:
+          - aws.codepipeline
+        detail-type:
+          - CodePipeline Pipeline Execution State Change
+        detail:
+          pipeline:
+            - lab-ec2-pipeline
+          state:
+            - SUCCEEDED
+      Targets:
+        - Arn: !Ref NotificationTopic
+          Id: SuccessTarget
+          InputTransformer:
+            InputPathsMap:
+              pipeline: $.detail.pipeline
+            InputTemplate: '"O pipeline <pipeline> foi concluido com sucesso."'
+
   TestProject:
     Type: AWS::CodeBuild::Project
     Properties:
