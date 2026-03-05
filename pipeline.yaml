@@ -1,0 +1,391 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Pipeline para build e deploy de aplicacao ECS
+
+Parameters:
+  GitHubOwner:
+    Type: String
+    Description: Seu usuario do GitHub
+
+  GitHubRepo:
+    Type: String
+    Description: Nome do repositorio
+
+  GitHubBranch:
+    Type: String
+    Default: main
+
+Resources:
+
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+
+  PipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: codepipeline-ecs-lab-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: codepipeline-ecs-lab-policy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:*
+                Resource: !Sub arn:aws:s3:::${ArtifactBucket}/*
+              - Effect: Allow
+                Action:
+                  - cloudformation:*
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - codestar-connections:UseConnection
+                Resource: arn:aws:codeconnections:us-east-2:311249665143:connection/d0f3f25b-f6dd-442d-9eaf-6f3fb930a717
+              - Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource:
+                  - !GetAtt CloudFormationRole.Arn
+                  - !GetAtt CodeBuildRole.Arn
+              - Effect: Allow
+                Action:
+                  - codebuild:BatchGetBuilds
+                  - codebuild:StartBuild
+                Resource: '*'
+
+  CloudFormationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cloudformation-ecs-lab-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: cloudformation-ecs-lab-policy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:*
+                  - ecs:*
+                  - ecr:*
+                  - elasticloadbalancing:*
+                  - autoscaling:*
+                  - iam:*
+                  - logs:*
+                  - ssm:GetParameters
+                  - s3:GetObject
+                  - s3:CreateBucket
+                  - s3:PutEncryptionConfiguration
+                  - s3:PutBucketPolicy
+                Resource: '*'
+
+  CodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: codebuild-ecs-lab-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: codebuild-ecs-lab-policy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                  - ecr:PutImage
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - cloudformation:DescribeStacks
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeInstances
+                  - ec2:DescribeInstanceStatus
+                  - elasticloadbalancing:DescribeLoadBalancers
+                  - elasticloadbalancing:DescribeTargetHealth
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource: !Sub arn:aws:s3:::${ArtifactBucket}/*
+
+  BuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: lab-ecs-build
+      ServiceRole: !GetAtt CodeBuildRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:7.0
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: AWS_ACCOUNT_ID
+            Value: '311249665143'
+          - Name: ECR_REPO_NAME
+            Value: lab-ecs-app
+          - Name: AWS_REGION
+            Value: us-east-2
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: buildspec.yml
+
+  TestProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: lab-ecs-test
+      ServiceRole: !GetAtt CodeBuildRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:7.0
+        EnvironmentVariables:
+          - Name: AWS_REGION
+            Value: us-east-2
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: buildspec-test.yml
+
+  NotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: lab-ecs-pipeline-notifications
+      Subscription:
+        - Protocol: email
+          Endpoint: enzo.tavares@fulltime.com.br
+
+  NotificationTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref NotificationTopic
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sns:Publish
+            Resource: !Ref NotificationTopic
+
+  ApprovalEvent:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: lab-ecs-pipeline-approval
+      EventPattern:
+        source:
+          - aws.codepipeline
+        detail-type:
+          - CodePipeline Action Execution State Change
+        detail:
+          pipeline:
+            - lab-ecs-pipeline
+          state:
+            - WAITING
+          type:
+            category:
+              - Approval
+      Targets:
+        - Arn: !Ref NotificationTopic
+          Id: ApprovalTarget
+          InputTransformer:
+            InputPathsMap:
+              pipeline: $.detail.pipeline
+              stage: $.detail.stage
+            InputTemplate: '"O pipeline <pipeline> esta aguardando aprovacao manual no estagio <stage>. Acesse o console AWS para aprovar ou rejeitar."'
+
+  FailureEvent:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: lab-ecs-pipeline-failure
+      EventPattern:
+        source:
+          - aws.codepipeline
+        detail-type:
+          - CodePipeline Pipeline Execution State Change
+        detail:
+          pipeline:
+            - lab-ecs-pipeline
+          state:
+            - FAILED
+      Targets:
+        - Arn: !Ref NotificationTopic
+          Id: FailureTarget
+          InputTransformer:
+            InputPathsMap:
+              pipeline: $.detail.pipeline
+            InputTemplate: '"O pipeline <pipeline> falhou. Acesse o console AWS para verificar o erro."'
+
+  SuccessEvent:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: lab-ecs-pipeline-success
+      EventPattern:
+        source:
+          - aws.codepipeline
+        detail-type:
+          - CodePipeline Pipeline Execution State Change
+        detail:
+          pipeline:
+            - lab-ecs-pipeline
+          state:
+            - SUCCEEDED
+      Targets:
+        - Arn: !Ref NotificationTopic
+          Id: SuccessTarget
+          InputTransformer:
+            InputPathsMap:
+              pipeline: $.detail.pipeline
+            InputTemplate: '"O pipeline <pipeline> foi concluido com sucesso."'
+
+  LabPipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: lab-ecs-pipeline
+      RoleArn: !GetAtt PipelineRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref ArtifactBucket
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: GitHubSource
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: '1'
+              Configuration:
+                ConnectionArn: arn:aws:codeconnections:us-east-2:311249665143:connection/d0f3f25b-f6dd-442d-9eaf-6f3fb930a717
+                FullRepositoryId: !Sub ${GitHubOwner}/${GitHubRepo}
+                BranchName: !Ref GitHubBranch
+                OutputArtifactFormat: CODE_ZIP
+              OutputArtifacts:
+                - Name: SourceOutput
+
+        - Name: Build
+          Actions:
+            - Name: BuildAndPush
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: '1'
+              Configuration:
+                ProjectName: !Ref BuildProject
+              InputArtifacts:
+                - Name: SourceOutput
+              OutputArtifacts:
+                - Name: BuildOutput
+
+        - Name: Approval
+          Actions:
+            - Name: ManualApproval
+              ActionTypeId:
+                Category: Approval
+                Owner: AWS
+                Provider: Manual
+                Version: '1'
+              Configuration:
+                CustomData: "Imagem Docker buildada e enviada para ECR. Aprovar para fazer o deploy no ECS."
+
+        - Name: Deploy
+          Actions:
+            - Name: DeployECS
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: '1'
+              Configuration:
+                ActionMode: CREATE_UPDATE
+                StackName: lab-ecs-stack
+                TemplatePath: BuildOutput::template.yaml
+                RoleArn: !GetAtt CloudFormationRole.Arn
+                Capabilities: CAPABILITY_NAMED_IAM
+                ParameterOverrides: !Sub |
+                  {
+                    "ContainerImage": "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/lab-ecs-app:latest"
+                  }
+              InputArtifacts:
+                - Name: BuildOutput
+
+        - Name: Test
+          Actions:
+            - Name: TestECS
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: '1'
+              Configuration:
+                ProjectName: !Ref TestProject
+              InputArtifacts:
+                - Name: BuildOutput
+
+        - Name: ApprovalDestroy
+          Actions:
+            - Name: AprovacaoDestrucao
+              ActionTypeId:
+                Category: Approval
+                Owner: AWS
+                Provider: Manual
+                Version: '1'
+              Configuration:
+                CustomData: "Testes passaram. Aprovar para destruir o stack ECS, ou rejeitar para manter rodando."
+
+        - Name: Destroy
+          Actions:
+            - Name: DestroyECS
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: '1'
+              Configuration:
+                ActionMode: DELETE_ONLY
+                StackName: lab-ecs-stack
+                RoleArn: !GetAtt CloudFormationRole.Arn
+              InputArtifacts:
+                - Name: BuildOutput
