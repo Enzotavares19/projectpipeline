@@ -17,10 +17,9 @@ phases:
       - echo "Estado atual $INSTANCE_STATE"
       - test "$INSTANCE_STATE" = "running" || (echo "ERRO instancia nao esta running" && exit 1)
 
-      - echo "Verificando status checks..."
-      - STATUS_CHECK=$(aws ec2 describe-instance-status --instance-ids $INSTANCE_ID --region us-east-2 --query "InstanceStatuses[0].InstanceStatus.Status" --output text)
-      - echo "Status check $STATUS_CHECK"
-      - test "$STATUS_CHECK" = "ok" || (echo "ERRO status check nao passou" && exit 1)
+      - echo "Aguardando status checks finalizarem..."
+      - aws ec2 wait instance-status-ok --instance-ids $INSTANCE_ID --region us-east-2
+      - echo "Status check ok"
 
       - echo "Verificando tag da instancia..."
       - TAG_VALUE=$(aws ec2 describe-instances --instance-ids $INSTANCE_ID --region us-east-2 --query "Reservations[0].Instances[0].Tags[?Key=='Name'].Value" --output text)
