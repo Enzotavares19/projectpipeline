@@ -145,7 +145,12 @@ Resources:
                   - s3:GetObject
                   - s3:PutObject
                 Resource: !Sub arn:aws:s3:::${ArtifactBucket}/*
-
+  ECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: lab-ecs-app
+      ImageScanningConfiguration:
+        ScanOnPush: true
   BuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
