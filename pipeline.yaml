@@ -274,7 +274,7 @@ Resources:
                 Provider: Manual
                 Version: '1'
               Configuration:
-                CustomData: "Revisar o template.yaml antes de aprovar o deploy"
+                CustomData: "Revisar o template.yaml antes de aprovar o deploy da EC2"
 
         - Name: Deploy
           Actions:
@@ -303,5 +303,31 @@ Resources:
                 Version: '1'
               Configuration:
                 ProjectName: !Ref TestProject
+              InputArtifacts:
+                - Name: SourceOutput
+
+        - Name: ApprovalDestroy
+          Actions:
+            - Name: AprovacaoDestrucao
+              ActionTypeId:
+                Category: Approval
+                Owner: AWS
+                Provider: Manual
+                Version: '1'
+              Configuration:
+                CustomData: "Os testes passaram. Aprovar para destruir a EC2 e limpar os recursos, ou rejeitar para manter rodando."
+
+        - Name: Destroy
+          Actions:
+            - Name: DestroyEC2
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: '1'
+              Configuration:
+                ActionMode: DELETE_ONLY
+                StackName: lab-ec2-stack
+                RoleArn: !GetAtt CloudFormationRole.Arn
               InputArtifacts:
                 - Name: SourceOutput
