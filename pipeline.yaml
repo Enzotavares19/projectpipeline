@@ -274,7 +274,7 @@ Resources:
                 Provider: Manual
                 Version: '1'
               Configuration:
-                CustomData: "Revisar o template.yaml antes de aprovar o deploy da EC2"
+                CustomData: "Revisar o template.yaml antes de aprovar o deploy"
 
         - Name: Deploy
           Actions:
