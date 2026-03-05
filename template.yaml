@@ -206,6 +206,8 @@ Resources:
       ContainerDefinitions:
         - Name: lab-app
           Image: !Ref ContainerImage
+          Memory: 512
+          MemoryReservation: 256
           Essential: true
           PortMappings:
             - ContainerPort: 5000
