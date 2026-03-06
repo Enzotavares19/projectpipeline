@@ -29,3 +29,8 @@ phases:
   post_build:
     commands:
       - echo "Todos os testes passaram com sucesso"
+artifacts:
+files:
+  - imagedefinitions.json
+  - template.yaml
+  - buildspec-test.yml
