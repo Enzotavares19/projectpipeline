@@ -367,7 +367,7 @@ Resources:
               Configuration:
                 ProjectName: !Ref TestProject
               InputArtifacts:
-                - Name: BuildOutput
+                - Name: SourceOutput
 
         - Name: ApprovalDestroy
           Actions:
