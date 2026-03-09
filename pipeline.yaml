@@ -94,6 +94,14 @@ Resources:
                   - s3:CreateBucket
                   - s3:PutEncryptionConfiguration
                   - s3:PutBucketPolicy
+                  - acm:RequestCertificate
+                  - acm:DescribeCertificate
+                  - acm:DeleteCertificate
+                  - acm:ListCertificates
+                  - route53:ChangeResourceRecordSets
+                  - route53:GetChange
+                  - route53:ListHostedZones
+                  - route53:ListResourceRecordSets
                 Resource: '*'
 
   CodeBuildRole:
