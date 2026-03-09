@@ -7,24 +7,30 @@ env:
 phases:
   pre_build:
     commands:
-      - echo "Buscando DNS do ALB..."
-      - ALB_DNS=$(aws cloudformation describe-stacks --stack-name lab-ecs-stack --region $AWS_REGION --query "Stacks[0].Outputs[?OutputKey=='ALBDnsName'].OutputValue" --output text)
-      - echo "ALB DNS encontrado $ALB_DNS"
+      - echo "Buscando URL da aplicacao no stack..."
+      - APP_URL=$(aws cloudformation describe-stacks --stack-name lab-ecs-stack --region $AWS_REGION --query "Stacks[0].Outputs[?OutputKey=='AppURL'].OutputValue" --output text)
+      - echo "URL encontrada $APP_URL"
 
   build:
     commands:
-      - echo "Aguardando ALB ficar disponivel..."
-      - sleep 30
+      - echo "Aguardando aplicacao ficar disponivel..."
+      - sleep 60
 
       - echo "Testando rota principal..."
-      - RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://$ALB_DNS/)
+      - RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" $APP_URL/)
       - echo "HTTP Status $RESPONSE"
       - test "$RESPONSE" = "200" || (echo "ERRO rota principal retornou $RESPONSE" && exit 1)
 
       - echo "Testando rota de health..."
-      - HEALTH=$(curl -s http://$ALB_DNS/health)
+      - HEALTH=$(curl -s $APP_URL/health)
       - echo "Health response $HEALTH"
       - echo $HEALTH | grep -q "healthy" || (echo "ERRO health check falhou" && exit 1)
+
+      - echo "Testando redirecionamento HTTP para HTTPS..."
+      - HTTP_URL=$(echo $APP_URL | sed 's/https/http/')
+      - REDIRECT=$(curl -s -o /dev/null -w "%{http_code}" $HTTP_URL/)
+      - echo "Redirect status $REDIRECT"
+      - test "$REDIRECT" = "301" || (echo "ERRO redirecionamento HTTP nao esta funcionando" && exit 1)
 
   post_build:
     commands:
